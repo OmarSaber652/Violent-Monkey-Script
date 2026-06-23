@@ -1,11 +1,11 @@
 ﻿// ==UserScript==
 // @name         Vodafone Cash + Advanced Last Items Manager for Foodics
 // @namespace    http://tampermonkey.net/
-// @version      4.6
+// @version      5.0
 // @description  تأكيد فودافون كاش + إدارة احترافية لـ Last Items بقوائم جاهزة وإضافة وحذف متقدم
 // @author       Omar Saber
 // @match        https://console.foodics.com/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // @updateURL    https://raw.githubusercontent.com/OmarSaber652/Violent-Monkey-Script/master/VodafoneCash+LastItemsManager.user.js
 // @downloadURL  https://raw.githubusercontent.com/OmarSaber652/Violent-Monkey-Script/master/VodafoneCash+LastItemsManager.user.js
 // ==/UserScript==
@@ -199,6 +199,120 @@
         
     };
 
+    const GOOGLE_SCRIPT_URL =
+        'https://script.google.com/macros/s/AKfycbzmgYKqlJnHIXFs7pp0UvNh1fh93Hm0XlpvMk_3L5tFr7kyM5cwYuK90EjEAa5rqbClXw/exec';
+
+
+    async function savePresetsToGoogle(presets) {
+
+        return new Promise((resolve) => {
+
+            GM_xmlhttpRequest({
+
+                method: 'POST',
+
+                url: GOOGLE_SCRIPT_URL,
+
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+
+                data: JSON.stringify(presets),
+
+                onload: function (response) {
+
+                    console.log(
+                        'Google Save Success:',
+                        response.responseText
+                    );
+
+                    resolve(true);
+                },
+
+                onerror: function (error) {
+
+                    console.error(
+                        'Google Save Error:',
+                        error
+                    );
+
+                    resolve(false);
+                }
+
+            });
+
+        });
+
+    }
+
+    async function loadPresetsFromGoogle() {
+
+        return new Promise((resolve) => {
+
+            GM_xmlhttpRequest({
+
+                method: 'GET',
+
+                url: GOOGLE_SCRIPT_URL,
+
+                onload: function (response) {
+
+                    try {
+
+                        const data =
+                            JSON.parse(response.responseText);
+
+                        localStorage.setItem(
+                            'lastPresets',
+                            JSON.stringify(data)
+                        );
+
+                        let syncedItems = [];
+
+                        data.forEach(preset => {
+
+                            if (predefinedLastItems[preset]) {
+
+                                syncedItems.push(
+                                    ...predefinedLastItems[preset]
+                                );
+
+                            }
+
+                        });
+
+                        syncedItems = [...new Set(syncedItems)];
+
+                        localStorage.setItem(
+                            'lastItems',
+                            JSON.stringify(syncedItems)
+                        );
+
+                        resolve(data);
+
+                    } catch {
+
+                        resolve([]);
+                    }
+
+                },
+
+                onerror: function (error) {
+
+                    console.error(
+                        'Google Load Error:',
+                        error
+                    );
+
+                    resolve([]);
+                }
+
+            });
+
+        });
+
+    }
+
     //////////////////////////// زر تأكيد الطلب ////////////////////////////
     function createVodafoneCashButton() {
         const originalSubmit = document.getElementById('order.submit');
@@ -264,7 +378,7 @@
 
         vodafoneBtn.insertAdjacentElement('afterend', lastBtn);
 
-        lastBtn.addEventListener('click', openLastItemsManager);
+        lastBtn.addEventListener('click', manageLastItems);
     }
 
     //////////////////////////// التصميم ////////////////////////////
@@ -453,180 +567,72 @@
     }
 
     //////////////////////////// إدارة Last Items ////////////////////////////
-    function openLastItemsManager() {
-        const div = document.createElement('div');
 
-        div.innerHTML = popupTemplate('إدارة Last Items', `
-        <button id="addLastItem" style="background:#3498db; color:white;">➕ إضافة</button>
-        <button id="deleteLastItem" style="background:#f39c12; color:white;">🗑️ حذف</button>
-        <button id="deleteAllLastItems" style="background:#e74c3c; color:white;">🔥 حذف الكل</button>
-    `);
+    async function manageLastItems() {
 
-        document.body.appendChild(div);
+        const activePresets =
+            JSON.parse(
+                localStorage.getItem('lastPresets') || '[]'
+            );
 
-        div.querySelector('#popupClose').onclick = () => div.remove();
+        const presetCheckboxes = Object.keys(predefinedLastItems)
+            .map(preset => {
 
-        div.querySelector('#addLastItem').onclick = () => {
-            div.remove();
-            addLastItems();
-        };
+                const isActive =
+                    activePresets.includes(preset);
 
-        div.querySelector('#deleteLastItem').onclick = () => {
-            div.remove();
-            deleteLastItems();
-        };
-
-        div.querySelector('#deleteAllLastItems').onclick = () => {
-            localStorage.removeItem('lastItems');
-            div.remove();
-            createWarningPopup('✅ تم حذف جميع العناصر.');
-        };
-    }
-
-    //////////////////////////// إضافة ////////////////////////////
-    // ==================== استبدل بداية addLastItems بالكامل ====================
-
-    function addLastItems() {
-        let current = JSON.parse(localStorage.getItem('lastItems') || '[]');
-
-
-        // إظهار فقط القوائم غير المضافة بالكامل
-        const availablePresetLists = Object.keys(predefinedLastItems).filter(preset => {
-            const presetItems = predefinedLastItems[preset];
-            return !presetItems.every(item => current.includes(item));
-        });
-
-        const presetOptions = availablePresetLists
-            .map(item => `<option value="${item}">${item}</option>`)
+                return `
+                <label style="
+                    display:block;
+                    text-align:right;
+                    margin:6px 0;
+                ">
+                    <input
+                        type="checkbox"
+                        class="managePresetCheckbox"
+                        value="${preset}"
+                        ${isActive ? 'checked' : ''}
+                    >
+                    ${preset}
+                </label>
+            `;
+            })
             .join('');
 
         const div = document.createElement('div');
 
-        div.innerHTML = popupTemplate('➕ إضافة عناصر Last Items', `
-    <div style="width:100%; text-align:center;">
-
-        ${availablePresetLists.length > 0 ? `
-            <label style="font-weight:bold;">اختر قائمة جاهزة:</label><br><br>
-
-            <select id="presetLastItems" style="width:90%; padding:10px; border-radius:8px;">
-                <option value="">-- اختر صنف --</option>
-                ${presetOptions}
-            </select>
-
-            <br><br>
-            ` : `
-            <div style="color:#27ae60; font-weight:bold; margin-bottom:15px;">
-                ✅ جميع القوائم الجاهزة تمت إضافتها بالفعل
-            </div>
-            `
-            }
-
-        <label style="font-weight:bold;">أو إضافة مخصصة:</label><br><br>
-
-        <textarea
-            id="customLastItemsInput"
-            placeholder="اكتب العناصر مفصولة بـ ,"
-            style="width:90%; height:100px; padding:10px; border-radius:8px;"
-        ></textarea>
-
-        <br><br>
-
-        <button id="saveItems" style="background:#3498db; color:white;">
-            💾 حفظ
-        </button>
-    </div>
-`);
-
-        document.body.appendChild(div);
-
-        div.querySelector('#popupClose').onclick = () => div.remove();
-
-        div.querySelector('#saveItems').onclick = () => {
-            let current = JSON.parse(localStorage.getItem('lastItems') || '[]');
-
-            const presetDropdown = document.getElementById('presetLastItems');
-            const selectedPreset = presetDropdown ? presetDropdown.value : '';
-
-            if (selectedPreset && predefinedLastItems[selectedPreset]) {
-                current = [...current, ...predefinedLastItems[selectedPreset]];
-            }
-
-            const customInput = document.getElementById('customLastItemsInput').value;
-
-            if (customInput.trim()) {
-                const customItems = customInput
-                    .split(',')
-                    .map(item => item.trim())
-                    .filter(item => item);
-
-                current = [...current, ...customItems];
-            }
-
-            current = [...new Set(current)];
-
-            localStorage.setItem('lastItems', JSON.stringify(current));
-
-            div.remove();
-
-            createWarningPopup('✅ تم حفظ العناصر بنجاح.');
-        };
-
-    }
-
-
-    //////////////////////////// حذف ////////////////////////////
-    function deleteLastItems() {
-        const lastItems = JSON.parse(localStorage.getItem('lastItems') || '[]');
-
-        if (lastItems.length === 0) {
-            createWarningPopup('⚠️ لا يوجد عناصر!');
-            return;
-        }
-
-        const availablePresetLists = Object.keys(predefinedLastItems).filter(preset => {
-            const presetItems = predefinedLastItems[preset];
-            return presetItems.every(item => lastItems.includes(item));
-        });
-
-        const presetOptions = availablePresetLists
-            .map(item => `<option value="${item}">${item}</option>`)
-            .join('');
-
-        const div = document.createElement('div');
-
-        div.innerHTML = popupTemplate('🗑️ حذف عناصر Last Items', `
+        div.innerHTML = popupTemplate('⚙️ إدارة Last Items', `
         <div style="width:100%; text-align:center;">
 
-            ${availablePresetLists.length > 0 ? `
-                <label style="font-weight:bold;">حذف قائمة جاهزة بالكامل:</label><br><br>
+            <div style="
+                width:90%;
+                margin:auto;
+                max-height:300px;
+                overflow:auto;
+                border:1px solid #ddd;
+                border-radius:8px;
+                padding:10px;
+                text-align:right;
+            ">
+                ${presetCheckboxes}
+            </div>
 
-                <select id="deletePresetList" style="width:90%; padding:10px; border-radius:8px;">
-                    <option value="">-- اختر قائمة --</option>
-                    ${presetOptions}
-                </select>
+            <br>
 
-                <br><br>
-
-                <button id="deletePresetBtn" style="background:#e67e22; color:white;">
-                    🗂️ حذف القائمة كاملة
-                </button>
-
-                <hr style="margin:25px 0;">
-                ` : ''
-            }
-
-            <label style="font-weight:bold;">أو حذف عنصر فردي:</label><br><br>
-
-            <select id="lastItemsDropdown" style="width:90%; padding:10px; border-radius:8px;">
-                ${lastItems.map((item, index) =>
-                `<option value="${index}">${item}</option>`
-            ).join('')}
-            </select>
+            <button
+                id="saveManageLastItems"
+                style="background:#3498db;color:white;"
+            >
+                💾 حفظ التغييرات
+            </button>
 
             <br><br>
 
-            <button id="deleteSelectedItem" style="background:red; color:white;">
-                🗑️ حذف المحدد
+            <button
+                id="deleteAllLastItems"
+                style="background:#e74c3c;color:white;"
+            >
+                🔥 حذف الكل
             </button>
 
         </div>
@@ -636,47 +642,74 @@
 
         div.querySelector('#popupClose').onclick = () => div.remove();
 
-        const deletePresetBtn = div.querySelector('#deletePresetBtn');
+        // حفظ التغييرات
+        div.querySelector('#saveManageLastItems').onclick = async () => {
 
-        if (deletePresetBtn) {
-            deletePresetBtn.onclick = () => {
-                const selectedPreset = document.getElementById('deletePresetList').value;
+            let updatedItems = [];
 
-                if (!selectedPreset || !predefinedLastItems[selectedPreset]) {
-                    createWarningPopup('⚠️ اختر قائمة أولاً.');
-                    return;
-                }
+            const selectedPresets = Array.from(
+                div.querySelectorAll('.managePresetCheckbox:checked')
+            ).map(cb => cb.value);
 
-                let current = JSON.parse(localStorage.getItem('lastItems') || '[]');
-
-                current = current.filter(item =>
-                    !predefinedLastItems[selectedPreset].includes(item)
-                );
-
-                localStorage.setItem('lastItems', JSON.stringify(current));
-
-                div.remove();
-
-                createWarningPopup(`✅ تم حذف قائمة ${selectedPreset} بالكامل.`);
-            };
-        }
-
-        div.querySelector('#deleteSelectedItem').onclick = () => {
-            const selectedIndex = parseInt(
-                document.getElementById('lastItemsDropdown').value
+            localStorage.setItem(
+                'lastPresets',
+                JSON.stringify(selectedPresets)
             );
 
-            let current = JSON.parse(localStorage.getItem('lastItems') || '[]');
+            savePresetsToGoogle(selectedPresets);
 
-            current.splice(selectedIndex, 1);
 
-            localStorage.setItem('lastItems', JSON.stringify(current));
+            selectedPresets.forEach(preset => {
+
+                if (predefinedLastItems[preset]) {
+
+                    updatedItems.push(
+                        ...predefinedLastItems[preset]
+                    );
+
+                }
+
+            });
+
+            updatedItems = [...new Set(updatedItems)];
+
+            localStorage.setItem(
+                'lastItems',
+                JSON.stringify(updatedItems)
+            );
 
             div.remove();
 
-            createWarningPopup('✅ تم حذف العنصر المحدد بنجاح.');
+            createWarningPopup(
+                '✅ تم حفظ التغييرات بنجاح.'
+            );
+        };
+
+        // حذف الكل
+        div.querySelector('#deleteAllLastItems').onclick = async () => {
+
+            if (!confirm(
+                'هل أنت متأكد من حذف جميع Last Items؟'
+            )) {
+                return;
+            }
+
+            localStorage.removeItem('lastItems');
+            localStorage.removeItem('lastPresets');
+
+            await savePresetsToGoogle([]);
+
+            div.remove();
+
+            createWarningPopup(
+                '✅ تم حذف جميع العناصر.'
+            );
         };
     }
+
+    //////////////////////////// إضافة ////////////////////////////
+    // ==================== استبدل بداية addLastItems بالكامل ====================
+
 
     //////////////////////////// تحذير ////////////////////////////
     function createWarningPopup(message) {
@@ -739,6 +772,18 @@
 
     // فحص كل دقيقة
     setInterval(autoResetLastItemsAt4AM, 60000);
+
+    setInterval(async () => {
+
+        const presets =
+            await loadPresetsFromGoogle();
+
+        localStorage.setItem(
+            'lastPresets',
+            JSON.stringify(presets)
+        );
+
+    }, 5000);
 
 
 
