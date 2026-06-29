@@ -4,6 +4,8 @@
 // @version      1.1
 // @description  Notify when a NEW incoming message arrives
 // @match        https://business.facebook.com/latest/inbox/*
+// @updateURL    https://raw.githubusercontent.com/OmarSaber652/Violent-Monkey-Script/master/MetaBusinessNotifier.user.js
+// @downloadURL  https://raw.githubusercontent.com/OmarSaber652/Violent-Monkey-Script/master/MetaBusinessNotifier.user.js
 // @grant        none
 // ==/UserScript==
 
