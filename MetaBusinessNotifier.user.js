@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Meta Business Notifier
 // @namespace    OmarSaber
-// @version      1.1
+// @version      1.2
 // @author       Omar Saber
 // @description  Notify when a NEW incoming message arrives
 // @match        https://business.facebook.com/latest/inbox/*
