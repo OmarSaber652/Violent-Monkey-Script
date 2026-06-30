@@ -2,6 +2,7 @@
 // @name         Meta Business Notifier
 // @namespace    OmarSaber
 // @version      1.1
+// @author       Omar Saber
 // @description  Notify when a NEW incoming message arrives
 // @match        https://business.facebook.com/latest/inbox/*
 // @updateURL    https://raw.githubusercontent.com/OmarSaber652/Violent-Monkey-Script/master/MetaBusinessNotifier.user.js
